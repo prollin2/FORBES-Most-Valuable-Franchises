@@ -1,0 +1,180 @@
+---
+title: "FORBES Most Valuable Franchises - Does Sport/League Contribute to Higher Valuations"
+author: "Parker Rollins"
+date: "2024-02-29"
+output:
+  html_document:
+    toc: true
+    theme: united
+---
+
+# Introduction
+
+  The purpose of this project is to explore the Forbes Most Valuable Sports Teams in the World ranking, and gain an understanding of how league (NFL, NBA, MLB, Premier League, etc.) influences valuation. Each year, Forbes looks at sources of revenue (net equity plus debt), historical transactions (i.e. how much the team was bought for and when), and stadium economics when calculating their valuation estimates for each team and ranks them. When I observed this ranking, I became interested in how the league each team participates in influences their value/ranking. Are NFL teams more likely to be in the top 50? Does the influence of Middle East Oil money in European soccer leagues have a significant impact on their valuation? I will explore these questions and more in my analysis.
+
+
+# Rationale
+
+  Given the valuation for each other top 50 teams/franchises, I will explore their breakdown by league with some exploratory visualizations (barplot/boxplot). Through this I can identify any preliminary trends in the rankings, and create a hypothesis before making any models. After I create my hypothesis, I will run a multiple regression to see at a basic level how each league contributes to the overall valuation of a team. To do this, I can create dummy variables for each league so the regression model can differentiate between each league. I will then test an XGboost regression model to see if I can produce better results than the multiple regression model. I will then assess the accuracy of the model by finding the RMSE, MAE, and R^2 for the regression model.
+  
+# Methods
+
+  I started by running a multiple regression with value as my prediction variable and league as my x-variable. This means I had to make dummy variables for each league so they could be differentiated in the model. I split the dataset into a training and testing set (80% train, 20% test), and identified league as our y-variable with league being our x-variable. I ran an XGboost training model to determine the most effective number of rounds (identified with the lowest test-rmse) which turned out to be 15 rounds. After running my XGBoost model, I tested its accuracy/efficacy by find the RMSE, MAE, and R^2 for the regression model. For these metrics, I want the RMSE and MAE to be low and the R^2 to be close to 1 which would signify a well-built model.
+
+
+# Findings
+
+  When looking at the results from the multiple regression model, I can determine that soccer has a higher coefficient than any other league in contributing to overall valuation (coef = 1.4166). This means that for every team that plays in a soccer league, their valuation increases by $1.4166 billion. However, the caveat with this model is the R^2 which is 0.061. This signifies a very weak positive fit from our model to the data. Also, each league is not significant in our model as their p-values are greater than my alpha of 0.05. I wanted to improve upon this model with an XGBoost regression model that hopefully could improve its R^2. 
+  The results from the XGBoost model did not provide better results as its R^2 was equally as poor as the multiple regression. What can be determined from this is that in order to truly understand the impact league has on a team's valuation, I need to find more data that identifies revenue streams, stadium finances, and other financial statistics to factor them into my models. Rather than looking at league holistically, I should be breaking it down to identify what it is that makes each league more valuable than the others. 
+  Based on my exploratory evaluations, I can identify that the NFL reigns supreme over other leagues with 30 of its 32 teams being within the top 50. Through more research, I found that soccer clubs have had more movement than any other league in the top 50 indicating that a change is being made in the way soccer clubs are managed and marketed. My next steps would be to analyze the way the NFL markets itself and its television deals comparative to European soccer leagues. Why are American leagues so dominant in the sports industry? Can it be replicated overseas?
+
+
+# Code
+
+
+Scrape Wikipedia: Forbes List of Most Valuable Sports Teams
+```{r}
+library(rvest)
+library(stringr)
+library(dplyr)
+library(magrittr)
+
+# 2023 Season
+link <- "https://en.wikipedia.org/wiki/Forbes_list_of_the_most_valuable_sports_teams#2010"
+
+table <- read_html(link) %>% 
+  html_table(header = TRUE) %>% 
+  `[[`(1) 
+
+save(table, file = "valuations.RData")
+load("valuations.RData")
+```
+
+
+Data Cleaning
+- Combine all international soccer leagues into one designated category (Soccer)
+- Convert values to numeric
+- Calculate median values
+```{r}
+load("valuations.RData")
+
+values <- table
+
+colnames(values)[5] <- ("Value")
+
+values$League <- gsub("Premier League", "Soccer", values$League)
+values$League <- gsub("La Liga", "Soccer", values$League)
+values$League <- gsub("Ligue 1", "Soccer", values$League)
+values$League <- gsub("Bundesliga", "Soccer", values$League)
+values$Sport <- gsub("American football", "American Football", values$Sport)
+
+values$Value <- as.numeric(gsub("\\$", "", values$Value))
+medians <- aggregate(Value ~ League, data = values, FUN = median)
+
+```
+
+
+Exploratory Visualizations
+- Top 5 Most Valuable Teams (Horizontal Bar Chart)
+- Number of Teams by League (Bar Chart)
+- Value by League (Boxplot)
+- Median Value by League (Bar Chart)
+```{r}
+suppressPackageStartupMessages(library(ggplot2))
+
+top_5 <- values[order(-values$Value),][1:10,]
+top_5 <- head(top_5)
+
+ggplot(data = top_5, aes(x = Value, y = reorder(Team, +Value), fill = League)) +
+  geom_bar(stat = "identity") +  # Use 'stat = "identity"' to plot values directly
+  geom_text(aes(label = Value), hjust = -0.2, size = 3) +  # Add data labels
+  labs(x = "Value in Billions (USD)", y = "Team", title = "Top 5 Teams by Value") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(angle = 0)) +  # Adjust the size of x-axis labels and keep y-axis labels horizontal
+  guides(fill = FALSE)
+
+ggplot(data = values, aes(x = League, fill = League)) +
+  geom_bar(stat = "count") +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.5, size = 3)+
+  labs(x = "League", y = "Number of Teams", title = "Number of Teams by League") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis labels
+
+ggplot(values, aes(x = League, y = Value, fill = League)) +
+  geom_boxplot() +
+  labs(x = "League", y = "Value in billions (USD)", title = "Boxplot of Value by League") +
+  theme_minimal()
+
+
+ggplot(data = medians, aes(x = League, y = Value, fill = League)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "League", y = "Average Value", title = "Median Value by League") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels
+  geom_text(aes(label = round(Value, 2)), vjust = -0.5, size = 3)
+```
+
+Multiple Linear Regression
+```{r}
+values$soccer <- ifelse(values$League == "Soccer", 1, 0)
+values$football <- ifelse(values$League == "NFL", 1, 0)
+values$basketball <- ifelse(values$League == "NBA", 1, 0)
+values$baseball <- ifelse(values$League == "MLB", 1, 0)
+values$racing <- ifelse(values$League == "Formula One", 1, 0)
+
+multiple_reg <- lm(Value ~ soccer + football + basketball + baseball + racing, data = values)
+
+summary(multiple_reg)
+```
+
+
+
+XGBoost
+```{r}
+library(randomForest)
+library(dplyr)
+library(xgboost)
+library(caret)
+
+set.seed(123)
+partitions <-  createDataPartition(values$Value, p = .8, list = F)
+train <- values[partitions,]
+test <- values[-partitions,]
+
+train_x = data.matrix(train[, 4])
+train_y = train[,5, drop = TRUE]
+
+test_x = data.matrix(test[, 4])
+test_y = test[, 5, drop = TRUE]
+
+xgb_train = xgb.DMatrix(data = train_x, label = train_y)
+xgb_test = xgb.DMatrix(data = test_x, label = test_y)
+
+list = list(train = xgb_train, test = xgb_test)
+model = xgb.train(data = xgb_train, max.depth = 3, watchlist = list, nrounds = 70)
+
+
+model <- xgboost(data = xgb_train, nrounds = 15, print_every_n = 5, params = list(booster = "gbtree", objective = "reg:linear", eval_metric = "rmse"))
+
+pred <- predict(model, xgb_test)
+```
+
+
+Assessing the Model
+```{r}
+#RMSE
+rmse <- sqrt(mean((test_y - pred)^2))
+print(rmse)
+
+#MAE
+mae <- mean(abs(test_y - pred))
+print(mae)
+
+#R-squared
+ss_total <- sum((test_y - mean(test_y))^2)
+ss_residual <- sum((test_y - pred)^2)
+r_squared <- 1 - (ss_residual / ss_total)
+print(r_squared)
+
+```
+
