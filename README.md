@@ -1,3 +1,5 @@
+![image](https://github.com/prollin2/FORBES-Most-Valuable-Franchises/assets/147635504/173e4014-de4a-47cb-b649-bd095bb4fa24)
+
 # FORBES-Most-Valuable-Franchises
 FORBES Most Valuable Franchises - Does Sport/League Contribute to Higher Valuations?
 
